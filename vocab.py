@@ -4,7 +4,9 @@ from collections import Counter
 
 
 class Vocab:
+    ''' 데이터 인코딩에 필요한 vocab을 만드는 모듈 '''
     def __init__(self, vocab_path):
+        # 모델에 필요한 special token을 정의합니다.
         self.special_tokens = ['<PAD>', '<BOS>', '<EOS>', '<UNK>']
         self.vocab_path = vocab_path
         self.data = None
