@@ -48,29 +48,3 @@ class LogLoader(Dataset):
 
         return blk_id, input_mask, encoder_input, decoder_input
 
-from vocab import Vocab
-from torch.utils.data import DataLoader
-from model import GruAutoEncoder
-vocab = Vocab('./data/vocab.txt').vocab
-dd = LogLoader('./data/train.pkl', vocab)
-
-Dataset = DataLoader(dd,batch_size=5, collate_fn=dd.batch_sequence)
-device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-model = GruAutoEncoder(vocab=vocab,
-                       embedding_hidden_dim=128,
-                       num_hidden_layer=1,
-                       gru_hidden_dim=512,
-                       device=device,
-                       dropout_p=0.1,
-                       attention_method="dot").to(device)
-for i, d in enumerate(Dataset):
-    if i>0:
-        break
-    input_mask, encoder_input, decoder_input = map(lambda x: x.to(device), d[1:])
-    inputs = {
-        'encoder_mask': input_mask,
-        'encoder_input': encoder_input,
-        'decoder_input': decoder_input,
-    }
-    outputs, loss = model(**inputs)
-    pred = outputs.max(dim=2)[1].transpose(0, 1)  # (B x L)
