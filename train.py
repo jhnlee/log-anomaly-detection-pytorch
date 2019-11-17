@@ -2,13 +2,13 @@ import os
 import argparse
 import torch
 import random
-from utils import HyperParamWriter
-from vocab import Vocab
-from log_loader import LogLoader
+from utils.hyperparam_writer import HyperParamWriter
+from utils.vocab import Vocab
+from datasets import LogLoader
 from torch.utils.data import DataLoader
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from warmup_scheduler import GradualWarmupScheduler
-from model import GruAutoEncoder
+from model.model_ae import GruAutoEncoder
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
@@ -44,7 +44,7 @@ def train(args, device, model, log_vocab):
     total_step = len(tr_loader) * args.epochs
     scheduler = CosineAnnealingLR(optimizer, T_max=total_step)
     warmup_scheduler = GradualWarmupScheduler(optimizer,
-                                              multiplier=10,
+                                              multiplier=100,
                                               total_epoch=total_step * args.warmup_percent,
                                               after_scheduler=scheduler)
 
@@ -98,6 +98,7 @@ def train(args, device, model, log_vocab):
             warmup_scheduler.step()
 
             show_lr = warmup_scheduler.get_lr()[0]
+            show_lr = 0
             writer.add_scalars('lr', {'lr': show_lr}, global_step)
             if global_step % args.eval_step == 0:
                 tqdm.write('global_step: {:3}, '
@@ -151,7 +152,7 @@ def evaluate(dataloader, model, vocab, device):
         with torch.no_grad():
             outputs, loss = model(**inputs)
 
-            pred = outputs.max(dim=2)[1].transpose(0, 1)  # (B x 2L)
+            pred = outputs.max(dim=2)[1].transpose(0, 1)  # (B x L)
 
             # mean accuracy except pad token
             not_pad = encoder_input != vocab.index('<PAD>')
@@ -170,8 +171,7 @@ def evaluate(dataloader, model, vocab, device):
 def set_seed(args):
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    if args.n_gpu > 0:
-        torch.cuda.manual_seed_all(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
 
 
 def main():
@@ -192,7 +192,7 @@ def main():
     # Train parameter
     parser.add_argument("--batch_size", default=512, type=int,
                         help="batch size")
-    parser.add_argument("--warmup_percent", default=0.01, type=int,
+    parser.add_argument("--warmup_percent", default=0.01, type=float,
                         help="Linear warmup over total step * warmup_percent.")
     parser.add_argument("--learning_rate", default=5e-4, type=float,
                         help="The initial learning rate for Adam.")
@@ -204,9 +204,11 @@ def main():
                         help="batch size")
 
     # Other parameters
+    parser.add_argument("--num_workers", default=4, type=int,
+                        help="num of working cpu threads")
     parser.add_argument("--device", default='cuda', type=str,
                         help="Whether to use cpu or cuda")
-    parser.add_argument('--fp16', action='store_true',
+    parser.add_argument('--fp16', default=0, type=int,
                         help="Whether to use 16-bit (mixed) precision (through NVIDIA apex) instead of 32-bit")
     parser.add_argument('--fp16_opt_level', type=str, default='O1',
                         help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
@@ -215,13 +217,13 @@ def main():
                         help="Random seed(default=0)")
 
     # Path parameters
-    parser.add_argument("--vocab_path", default='./data/vocab.txt', type=str, required=True,
+    parser.add_argument("--vocab_path", type=str, required=True,
                         help="vocab.txt directory")
-    parser.add_argument("--train_data_path", default='./data/train.pkl', type=str, required=True,
+    parser.add_argument("--train_data_path", type=str, required=True,
                         help="train dataset directory")
-    parser.add_argument("--val_data_path", default='./data/val.pkl', type=str, required=True,
+    parser.add_argument("--val_data_path", type=str, required=True,
                         help="validation dataset directory")
-    parser.add_argument("--save_path", default='./data/model/', type=str, required=True,
+    parser.add_argument("--save_path", type=str, required=True,
                         help="directory where model parameters will be saved")
 
     args = parser.parse_args()
@@ -235,10 +237,14 @@ def main():
                            gru_hidden_dim=args.gru_hidden_dim,
                            device=device,
                            dropout_p=args.dropout_p,
-                           attention_method=args.attention_method)
+                           attention_method=args.attention_method).to(device)
     global_step, train_loss, best_val_loss, train_acc, best_val_acc = train(args, device, model, log_vocab)
 
     # Write hyperparameter
     hyper_param_writer = HyperParamWriter('./hyper_search/hyper_parameter.csv')
     hyper_param_writer.update(args, train_loss, train_acc, best_val_loss, best_val_acc)
+
+
+if __name__ == '__main__':
+    main()
 
