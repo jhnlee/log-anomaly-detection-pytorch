@@ -29,7 +29,7 @@ class HyperParamWriter:
         if self.hparams is None:
             self.hparams = pd.DataFrame(self.writer, index=[0])
         else:
-            self.hparams = self.hparams.append(self.writer, ignore_index = True)
+            self.hparams = self.hparams.append(self.writer, ignore_index=True)
         self.save()
 
     def save(self):

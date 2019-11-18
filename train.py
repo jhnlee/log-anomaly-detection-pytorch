@@ -1,16 +1,24 @@
 import os
 import argparse
-import torch
 import random
+import logging
+from tqdm import tqdm
+
+import torch
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+from torch.optim.lr_scheduler import CosineAnnealingLR
+
+from warmup_scheduler import GradualWarmupScheduler
+from datasets import LogLoader
+from model.model_ae import GruAutoEncoder
+
 from utils.hyperparam_writer import HyperParamWriter
 from utils.vocab import Vocab
-from datasets import LogLoader
-from torch.utils.data import DataLoader
-from torch.optim.lr_scheduler import CosineAnnealingLR
-from warmup_scheduler import GradualWarmupScheduler
-from model.model_ae import GruAutoEncoder
-from tqdm import tqdm
-from torch.utils.tensorboard import SummaryWriter
+from utils.logger import get_logger
+
+logger = get_logger('GRU AutoEncoder')
+logger.setLevel(logging.INFO)
 
 
 def train(args, device, model, log_vocab):
@@ -52,6 +60,7 @@ def train(args, device, model, log_vocab):
     if args.fp16:
         try:
             from apex import amp
+            logger.info('Use fp16')
         except ImportError:
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
@@ -108,19 +117,15 @@ def train(args, device, model, log_vocab):
         # Evaluate at the end of batch
         val_loss, val_acc = evaluate(val_loader, model, log_vocab, device)
 
-        writer.add_scalars('loss', {'train': train_loss / (step + 1),
+        writer.add_scalars('loss', {'train': loss,
                                     'val': val_loss}, global_step)
-        writer.add_scalars('acc', {'train': train_acc / (step + 1),
+        writer.add_scalars('acc', {'train': batch_acc,
                                    'val': val_acc}, global_step)
 
         tqdm.write('global_step: {:3}, '
-                   'tr_loss: {:.3f}, '
                    'val_loss: {:.3f}, '
-                   'tr_acc: {:.3f}, '
                    'val_acc: {:.3f} '.format(global_step,
-                                             train_loss / (step + 1),
                                              val_loss,
-                                             train_acc / (step + 1),
                                              val_acc))
 
         if val_loss < best_val_loss:
@@ -131,10 +136,11 @@ def train(args, device, model, log_vocab):
 
     writer.close()
 
-    return global_step, train_loss / (step + 1), best_val_loss, train_acc / (step + 1), best_val_acc
+    return global_step, loss.item(), best_val_loss, batch_acc, best_val_acc
 
 
 def evaluate(dataloader, model, vocab, device):
+    logger.info('evaluation')
     val_loss = 0
     val_acc = 0
 
@@ -229,6 +235,7 @@ def main():
     args = parser.parse_args()
 
     set_seed(args)
+    logger.info('training starts.')
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     log_vocab = Vocab(args.vocab_path).vocab
     model = GruAutoEncoder(vocab=log_vocab,
@@ -238,11 +245,19 @@ def main():
                            device=device,
                            dropout_p=args.dropout_p,
                            attention_method=args.attention_method).to(device)
+    import time
+    t = time.time()
     global_step, train_loss, best_val_loss, train_acc, best_val_acc = train(args, device, model, log_vocab)
+    elapsed = time.time() - t
 
+    logger.info('training done.')
+    logger.info('elapsed time: %.3f Hours' % (elapsed / 3600.))
+    logger.info('best acc in testset: %.4f' % train_acc)
+    logger.info('best loss in testset: %.4f' % best_val_loss)
+    
     # Write hyperparameter
     hyper_param_writer = HyperParamWriter('./hyper_search/hyper_parameter.csv')
-    hyper_param_writer.update(args, train_loss, train_acc, best_val_loss, best_val_acc)
+    hyper_param_writer.update(args, train_loss, train_acc.item(), best_val_loss, best_val_acc.item())
 
 
 if __name__ == '__main__':
