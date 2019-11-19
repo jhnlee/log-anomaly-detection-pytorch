@@ -130,7 +130,7 @@ def train(args, device, model, log_vocab):
 
         writer.add_scalars('loss', {'val': val_loss,
                                     'train': train_loss / (step + 1)}, global_step)
-        writer.add_scalars('acc', {'val': val_acc
+        writer.add_scalars('acc', {'val': val_acc,
                                    'train': train_acc / (step + 1)}, global_step)
 
         tqdm.write('global_step: {:3}, '
