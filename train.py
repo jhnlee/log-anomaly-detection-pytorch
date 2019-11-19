@@ -65,7 +65,7 @@ def train(args, device, model, log_vocab):
             raise ImportError("Please install apex from https://www.github.com/nvidia/apex to use fp16 training.")
         model, optimizer = amp.initialize(model, optimizer, opt_level=args.fp16_opt_level)
 
-    # tensorboard
+    # tensorboard 경로 설정
     if not os.path.exists(args.save_path):
         os.mkdir(args.save_path)
     writer = SummaryWriter(args.save_path)
@@ -73,13 +73,14 @@ def train(args, device, model, log_vocab):
     best_val_loss = 1e+9
     global_step = 0
 
-    train_loss = 0
-    train_acc = 0
-
-    for epoch in tqdm(range(args.epochs), desc='epocs'):
+    for epoch in tqdm(range(args.epochs), desc='epochs'):
+        train_loss = 0
+        train_acc = 0
         for step, batch in tqdm(enumerate(tr_loader), desc='steps', total=len(tr_loader)):
             model.train()
             input_mask, encoder_input, decoder_input = map(lambda x: x.to(device), batch[1:])
+
+            # kwargs를 통해 모델에 input을 넣는 방법
             inputs = {
                 'encoder_mask': input_mask,
                 'encoder_input': encoder_input,
@@ -88,16 +89,18 @@ def train(args, device, model, log_vocab):
             outputs, loss = model(**inputs)
             pred = outputs.max(dim=2)[1].transpose(0, 1)  # (B x L)
 
-            # mean accuracy except for pad token
+            # mean accuracy except for pad token (패딩을 제외하고 accuracy 계산)
             not_pad = encoder_input != log_vocab.index('<PAD>')
             num_words = not_pad.sum()
             batch_acc = (pred[not_pad] == encoder_input[not_pad]).float().sum() / num_words
 
+            # mixed precision을 이용하는 경우
             if args.fp16:
                 with amp.scale_loss(loss, optimizer) as scaled_loss:
                     scaled_loss.backward()
                 torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), args.grad_clip_norm)
             else:
+                # 일반적인 경우
                 loss.backward()
                 torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip_norm)
 
@@ -107,20 +110,29 @@ def train(args, device, model, log_vocab):
             warmup_scheduler.step()
 
             show_lr = warmup_scheduler.get_lr()[0]
-            show_lr = 0
             writer.add_scalars('lr', {'lr': show_lr}, global_step)
+
+            train_loss += loss.item()
+            train_acc += batch_acc.item()
+
+            # 학습 상황 확인용
             if global_step % args.eval_step == 0:
                 tqdm.write('global_step: {:3}, '
                            'tr_loss: {:.3f}, '
-                           'tr_acc: {:.3f}, '.format(global_step, loss, batch_acc, ))
+                           'tr_acc: {:.3f}, '
+                           'lr: {:.3f}'.format(global_step, loss.item(), batch_acc.item(), show_lr))
 
-        # Evaluate at the end of batch
+                writer.add_scalars('loss', {'train': train_loss / (step + 1)}, global_step)
+                writer.add_scalars('acc', {'train': train_acc / (step + 1)}, global_step)
+
+                train_loss = 0
+                train_acc = 0
+
+        # Evaluate at the end of step (아래 정의된 evaluate 함수를 통해 validation 수행)
         val_loss, val_acc = evaluate(val_loader, model, log_vocab, device)
 
-        writer.add_scalars('loss', {'train': loss,
-                                    'val': val_loss}, global_step)
-        writer.add_scalars('acc', {'train': batch_acc,
-                                   'val': val_acc}, global_step)
+        writer.add_scalars('loss', {'val': val_loss}, global_step)
+        writer.add_scalars('acc', {'val': val_acc}, global_step)
 
         tqdm.write('global_step: {:3}, '
                    'val_loss: {:.3f}, '
@@ -136,11 +148,10 @@ def train(args, device, model, log_vocab):
 
     writer.close()
 
-    return global_step, loss.item(), best_val_loss, batch_acc, best_val_acc
+    return global_step, train_loss, best_val_loss, train_acc, best_val_acc
 
 
 def evaluate(dataloader, model, vocab, device):
-    logger.info('evaluation')
     val_loss = 0
     val_acc = 0
 
@@ -165,13 +176,13 @@ def evaluate(dataloader, model, vocab, device):
             num_words = not_pad.sum()
             batch_acc = (pred[not_pad] == encoder_input[not_pad]).float().sum() / num_words
 
-            val_loss += loss
-            val_acc += batch_acc
+            val_loss += loss.item()
+            val_acc += batch_acc.item()
 
     val_loss /= (val_step + 1)
     val_acc /= (val_step + 1)
 
-    return val_loss.item(), val_acc
+    return val_loss, val_acc
 
 
 def set_seed(args):
@@ -184,11 +195,11 @@ def main():
     parser = argparse.ArgumentParser()
 
     # Model parameters
-    parser.add_argument("--embedding_hidden_dim", default=128, type=int,
+    parser.add_argument("--embedding_hidden_dim", default=64, type=int,
                         help="hidden dimension for embedding matrix")
     parser.add_argument("--num_hidden_layer", default=1, type=int,
                         help="number of gru layers in encoder")
-    parser.add_argument("--gru_hidden_dim", default=512, type=int,
+    parser.add_argument("--gru_hidden_dim", default=256, type=int,
                         help="hidden dimension for encoder and decoder gru")
     parser.add_argument("--dropout_p", default=0.1, type=float,
                         help="dropout percentage for encoder and decoder gru")
@@ -198,19 +209,19 @@ def main():
     # Train parameter
     parser.add_argument("--batch_size", default=512, type=int,
                         help="batch size")
-    parser.add_argument("--warmup_percent", default=0.01, type=float,
+    parser.add_argument("--warmup_percent", default=0.001, type=float,
                         help="Linear warmup over total step * warmup_percent.")
-    parser.add_argument("--learning_rate", default=5e-4, type=float,
+    parser.add_argument("--learning_rate", default=1e-5, type=float,
                         help="The initial learning rate for Adam.")
-    parser.add_argument("--epochs", default=50, type=int,
+    parser.add_argument("--epochs", default=3, type=int,
                         help="total epochs")
-    parser.add_argument("--eval_step", default=1000, type=int,
+    parser.add_argument("--eval_step", default=50, type=int,
                         help="show training accuracy on every eval step")
     parser.add_argument("--grad_clip_norm", default=1.0, type=float,
                         help="batch size")
 
     # Other parameters
-    parser.add_argument("--num_workers", default=4, type=int,
+    parser.add_argument("--num_workers", default=8, type=int,
                         help="num of working cpu threads")
     parser.add_argument("--device", default='cuda', type=str,
                         help="Whether to use cpu or cuda")
@@ -223,13 +234,13 @@ def main():
                         help="Random seed(default=0)")
 
     # Path parameters
-    parser.add_argument("--vocab_path", type=str, required=True,
+    parser.add_argument("--vocab_path", type=str,  default='./data/vocab.txt',
                         help="vocab.txt directory")
-    parser.add_argument("--train_data_path", type=str, required=True,
+    parser.add_argument("--train_data_path", type=str, default='./data/train.pkl',
                         help="train dataset directory")
-    parser.add_argument("--val_data_path", type=str, required=True,
+    parser.add_argument("--val_data_path", type=str, default='./data/val.pkl',
                         help="validation dataset directory")
-    parser.add_argument("--save_path", type=str, required=True,
+    parser.add_argument("--save_path", type=str, default='./model_saved/',
                         help="directory where model parameters will be saved")
 
     args = parser.parse_args()
@@ -252,12 +263,12 @@ def main():
 
     logger.info('training done.')
     logger.info('elapsed time: %.3f Hours' % (elapsed / 3600.))
-    logger.info('best acc in testset: %.4f' % train_acc)
+    logger.info('best acc in testset: %.4f' % best_val_acc)
     logger.info('best loss in testset: %.4f' % best_val_loss)
     
     # Write hyperparameter
     hyper_param_writer = HyperParamWriter('./hyper_search/hyper_parameter.csv')
-    hyper_param_writer.update(args, train_loss, train_acc.item(), best_val_loss, best_val_acc.item())
+    hyper_param_writer.update(args, train_loss, train_acc, best_val_loss, best_val_acc)
 
 
 if __name__ == '__main__':

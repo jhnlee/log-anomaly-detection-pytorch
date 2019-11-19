@@ -1,0 +1,2 @@
+date,train_loss,train_accuracy,val_loss,val_accuracy,embedding_hidden_dim,num_hidden_layer,gru_hidden_dim,dropout_p,attention_method,batch_size,warmup_percent,learning_rate,epochs,eval_step,grad_clip_norm,num_workers,device,fp16,fp16_opt_level,seed,vocab_path,train_data_path,val_data_path,save_path
+2019-11-17 18:19,6.629331323892984e-07,1.0,0.0002857051440514624,0.9999590516090393,64,1,256,0.1,dot,256,0.001,1e-05,30,100,1.0,4,cuda,0,01,0,./data/vocab.txt,./data/train.pkl,./data/val.pkl,./model_saved/

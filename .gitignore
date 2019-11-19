@@ -1,3 +1,9 @@
+apex/
+
+# model saved
+hyperparam_search/
+model_saved/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
