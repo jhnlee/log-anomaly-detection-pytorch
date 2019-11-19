@@ -122,17 +122,16 @@ def train(args, device, model, log_vocab):
                            'tr_acc: {:.3f}, '
                            'lr: {:.3f}'.format(global_step, loss.item(), batch_acc.item(), show_lr))
 
-                writer.add_scalars('loss', {'train': train_loss / (step + 1)}, global_step)
-                writer.add_scalars('acc', {'train': train_acc / (step + 1)}, global_step)
-
-                train_loss = 0
-                train_acc = 0
+                writer.add_scalars('loss', {'train': loss.item()}, global_step)
+                writer.add_scalars('acc', {'train': loss.item()}, global_step)
 
         # Evaluate at the end of step (아래 정의된 evaluate 함수를 통해 validation 수행)
         val_loss, val_acc = evaluate(val_loader, model, log_vocab, device)
 
-        writer.add_scalars('loss', {'val': val_loss}, global_step)
-        writer.add_scalars('acc', {'val': val_acc}, global_step)
+        writer.add_scalars('loss', {'val': val_loss,
+                                    'train': train_loss / (step + 1)}, global_step)
+        writer.add_scalars('acc', {'val': val_acc
+                                   'train': train_acc / (step + 1)}, global_step)
 
         tqdm.write('global_step: {:3}, '
                    'val_loss: {:.3f}, '

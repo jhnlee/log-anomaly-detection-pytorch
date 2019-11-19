@@ -9,9 +9,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-#ipython
-.ipynb_checkpoints/
-
 #pycharm
 .idea/
 
