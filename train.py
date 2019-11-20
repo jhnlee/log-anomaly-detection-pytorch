@@ -121,17 +121,17 @@ def train(args, device, model, log_vocab):
                            'tr_loss: {:.3f}, '
                            'tr_acc: {:.3f}, '
                            'lr: {:.3f}'.format(global_step, loss.item(), batch_acc.item(), show_lr))
-
-                writer.add_scalars('loss', {'train': loss.item()}, global_step)
-                writer.add_scalars('acc', {'train': loss.item()}, global_step)
-
+        
+        train_loss /= (step + 1)
+        train_acc /= (step + 1)
+        
         # Evaluate at the end of step (아래 정의된 evaluate 함수를 통해 validation 수행)
         val_loss, val_acc = evaluate(val_loader, model, log_vocab, device)
 
         writer.add_scalars('loss', {'val': val_loss,
-                                    'train': train_loss / (step + 1)}, global_step)
+                                    'train': train_loss}, global_step)
         writer.add_scalars('acc', {'val': val_acc,
-                                   'train': train_acc / (step + 1)}, global_step)
+                                   'train': train_acc}, global_step)
 
         tqdm.write('global_step: {:3}, '
                    'val_loss: {:.3f}, '
@@ -212,9 +212,9 @@ def main():
                         help="Linear warmup over total step * warmup_percent.")
     parser.add_argument("--learning_rate", default=1e-5, type=float,
                         help="The initial learning rate for Adam.")
-    parser.add_argument("--epochs", default=3, type=int,
+    parser.add_argument("--epochs", default=30, type=int,
                         help="total epochs")
-    parser.add_argument("--eval_step", default=50, type=int,
+    parser.add_argument("--eval_step", default=100, type=int,
                         help="show training accuracy on every eval step")
     parser.add_argument("--grad_clip_norm", default=1.0, type=float,
                         help="batch size")
