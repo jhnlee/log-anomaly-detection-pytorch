@@ -37,14 +37,14 @@ def train(args, device, model, log_vocab):
                            shuffle=True,
                            num_workers=args.num_workers,
                            pin_memory=True,
-                           drop_last=True,
+                           drop_last=False,
                            collate_fn=tr_set.batch_sequence)
 
     val_loader = DataLoader(dataset=val_set,
                             batch_size=args.batch_size,
                             num_workers=args.num_workers,
                             pin_memory=True,
-                            drop_last=True,
+                            drop_last=False,
                             collate_fn=tr_set.batch_sequence)
 
     # Load optimizer
@@ -52,7 +52,7 @@ def train(args, device, model, log_vocab):
     total_step = len(tr_loader) * args.epochs
     scheduler = CosineAnnealingLR(optimizer, T_max=total_step)
     warmup_scheduler = GradualWarmupScheduler(optimizer,
-                                              multiplier=100,
+                                              multiplier=10,
                                               total_epoch=total_step * args.warmup_percent,
                                               after_scheduler=scheduler)
 

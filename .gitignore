@@ -112,3 +112,6 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+hyper_search/hyper_parameter.csv
+hyper_search/hyper_parameter.csv
+hyper_search/hyper_parameter.csv

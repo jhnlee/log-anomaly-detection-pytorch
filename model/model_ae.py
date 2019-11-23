@@ -164,6 +164,6 @@ class Attention(nn.Module):
             raise ValueError("Invalid attention method")
 
         # Mask to pad token
-        energy = energy.masked_fill(encoder_mask.unsqueeze(1) == 0, -1e10)
+        energy = energy.masked_fill(encoder_mask.unsqueeze(1) == 0, -float('inf'))
 
         return energy
