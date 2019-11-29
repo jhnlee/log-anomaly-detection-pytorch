@@ -87,7 +87,7 @@ class GruDecoder(nn.Module):
         self.gru_layer = nn.GRU(input_size=embedding_hidden_dim,
                                 hidden_size=gru_hidden_dim)
         self.attention_layer = Attention(method=attention_method,
-                                         hidden_size=gru_hidden_dim * 2)
+                                         hidden_size=gru_hidden_dim)
         self.concat_layer = nn.Linear(in_features=gru_hidden_dim * 2,
                                       out_features=gru_hidden_dim)
         self.fc_layer = nn.Linear(in_features=gru_hidden_dim,
